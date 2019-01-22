@@ -9,7 +9,7 @@ class Config:
         self.data_path = self.proj_path + 'FashionAI_Keypoint_Detection/'
         self.batch_size_per_gpu = 6
         self.workers = 10
-        self.gpus = '0,1,2,3' # CUDA_DEVICES
+        self.gpus = '0,1' # CUDA_DEVICES
         self.base_lr = 1e-3  # learning rate
         self.epochs = 100
 
