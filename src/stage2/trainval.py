@@ -9,7 +9,7 @@ from torch.nn import DataParallel
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import sys
-sys.path.append('/home/lsy/Fashion/')
+sys.path.append('/home/nfs/shubham9/keypointdetect')
 
 from src import pytorch_utils
 from src.kpda_parser import KPDA
@@ -59,6 +59,8 @@ def train(data_loader, net, loss, optimizer, lr):
         loss_output[0].backward()
         optimizer.step()
         metrics.append([loss_output[0].item(), loss_output[1].item(), loss_output[2].item()])
+        if (i%50==0):
+            print("%d/%d loss:%.3f"%(i,len(data_loader),loss_output[0].data))
     end_time = time.time()
     metrics = np.asarray(metrics, np.float32)
     return metrics, end_time - start_time
@@ -83,26 +85,38 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('-c', '--clothes', help='specify the clothing type', default='outwear')
     parser.add_argument('-r', '--resume', help='specify the checkpoint', default=None)
+    parser.add_argument('--data_path', type=str, default='/home/nfs/shubham9/keypointdetect/', help='project path')
+    parser.add_argument('--batchsize', type=int, default=6, help='batchsize per gpu')
+    parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
+    parser.add_argument('--nEpochs', type=int, default=100, help='number of epochs to train for')
+    parser.add_argument('--img_max_size', type=int, default=512, help='maximum image size')
+    parser.add_argument('--mu', type=float, default=0.65, help='mu')
+    parser.add_argument('--sigma', type=float, default=0.25, help='sigma')
+
+
     args = parser.parse_args(sys.argv[1:])
+    print(args)
     print('Training ' + args.clothes)
 
-    config = Config(args.clothes)
-    workers = config.workers
-    n_gpu = pytorch_utils.setgpu(config.gpus)
-    batch_size = config.batch_size_per_gpu * n_gpu
+    data_path = args.data_path + 'FashionAIdataset/'
 
-    epochs = config.epochs
+    config = Config(args)
+    workers = config.workers
+    # n_gpu = pytorch_utils.setgpu(config.gpus)
+    batch_size = args.batchsize * n_gpu
+
+    epochs = args.nEpochs
     # 256 pixels: SGD L1 loss starts from 1e-2, L2 loss starts from 1e-3
     # 512 pixels: SGD L1 loss starts from 1e-3, L2 loss starts from 1e-4
-    base_lr = config.base_lr
+    base_lr = args.lr
     save_dir = config.proj_path + 'checkpoints/'
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
 
     net = CascadePyramidNet(config)
     loss = VisErrorLoss()
-    train_data = KPDA(config, config.data_path, 'train')
-    val_data = KPDA(config, config.data_path, 'val')
+    train_data = KPDA(config, data_path, 'train')
+    val_data = KPDA(config, data_path, 'val')
     print('Train sample number: %d' % train_data.size())
     print('Val sample number: %d' % val_data.size())
 

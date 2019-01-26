@@ -3,18 +3,18 @@ import numpy as np
 
 class Config:
 
-    def __init__(self, clothes):
-        # custom configs
-        self.proj_path = '/home/storage/lsy/fashion/'
-        self.data_path = self.proj_path + 'FashionAI_Keypoint_Detection/'
-        self.batch_size_per_gpu = 6
+    def __init__(self, args):
+        # # custom configs
+        # self.proj_path = '/home/nfs/shubham9/keypointdetect/'
+        # self.data_path = self.proj_path + 'FashionAIdataset/'
+        # self.batch_size_per_gpu = 6
         self.workers = 10
-        self.gpus = '0,1' # CUDA_DEVICES
-        self.base_lr = 1e-3  # learning rate
-        self.epochs = 100
+        # self.gpus = '0' # CUDA_DEVICES
+        # self.base_lr = 1e-3  # learning rate
+        # self.epochs = 100
 
 
-        self.clothes = clothes
+        self.clothes = args.clothes
         self.keypoints = {'blouse' : ['neckline_left', 'neckline_right', 'center_front', 'shoulder_left', 'shoulder_right',
                                       'armpit_left', 'armpit_right', 'cuff_left_in', 'cuff_left_out', 'cuff_right_in',
                                       'cuff_right_out', 'top_hem_left', 'top_hem_right'],
@@ -39,9 +39,9 @@ class Config:
         elif self.clothes in ['trousers', 'skirt']:
             self.datum = [keypoint.index('waistband_left'), keypoint.index('waistband_right')]
         # Img
-        self.img_max_size = 512
-        self.mu = 0.65
-        self.sigma = 0.25
+        self.img_max_size = args.img_max_size
+        self.mu = args.mu
+        self.sigma =  args.sigma 
         # RPN
         self.anchor_areas = [32 * 32., 64 * 64., 128 * 128., 256 * 256., 512 * 512.]  # p3 -> p7
         self.aspect_ratios = [1 / 5., 1 / 2., 1 / 1., 2 / 1., 5 / 1.]  # w/h
