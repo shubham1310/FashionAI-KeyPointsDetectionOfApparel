@@ -91,7 +91,9 @@ if __name__ == '__main__':
     parser.add_argument('--nEpochs', type=int, default=100, help='number of epochs to train for')
     parser.add_argument('--img_max_size', type=int, default=512, help='maximum image size')
     parser.add_argument('--mu', type=float, default=0.65, help='mu')
-    parser.add_argument('--sigma', type=float, default=0.25, help='sigma')
+    parser.add_argument('--sigma', type=float, default=0.25, help='sigma ')
+    parser.add_argument('--gpus', type=str, default='0', help='gpus')
+    parser.add_argument('--out', type=str, default='checkpoints/', help='output directory')
 
 
     args = parser.parse_args(sys.argv[1:])
@@ -102,14 +104,14 @@ if __name__ == '__main__':
 
     config = Config(args)
     workers = config.workers
-    # n_gpu = pytorch_utils.setgpu(config.gpus)
+    n_gpu = pytorch_utils.setgpu(args.gpus)
     batch_size = args.batchsize * n_gpu
 
     epochs = args.nEpochs
     # 256 pixels: SGD L1 loss starts from 1e-2, L2 loss starts from 1e-3
     # 512 pixels: SGD L1 loss starts from 1e-3, L2 loss starts from 1e-4
     base_lr = args.lr
-    save_dir = config.proj_path + 'checkpoints/'
+    save_dir = args.out + 'checkpoints/'
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
 

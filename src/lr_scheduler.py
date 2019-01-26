@@ -1,6 +1,6 @@
 
 class LRScheduler():
-    def __init__(self, base_lr, epochs=None, patience=3, factor=0.1, min_lr=1e-7, best_loss=float('inf')):
+    def __init__(self, base_lr, epochs=None, patience=5, factor=0.1, min_lr=1e-7, best_loss=float('inf')):
         self.patience = patience
         self.base_lr = base_lr
         self.epochs = epochs  # list

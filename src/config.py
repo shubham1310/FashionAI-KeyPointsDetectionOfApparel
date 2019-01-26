@@ -68,9 +68,10 @@ class Config:
                       'skirt' : [26, 32, 39],
                       'dress' : [30, 34, 31]
                      }
-        self.lrschedule = lrschedule[clothes]
+        self.lrschedule = lrschedule[args.clothes]
 
 
 if __name__ == '__main__':
-    config = Config('outwear')
-    print(config.conjug)
+    pass
+    # config = Config('outwear')
+    # print(config.conjug)
