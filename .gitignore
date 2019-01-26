@@ -1,3 +1,4 @@
 .idea/
 FashionAIdataset/*
 checkpoints/*
+*__pycache__*
