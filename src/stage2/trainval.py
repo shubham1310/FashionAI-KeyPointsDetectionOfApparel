@@ -8,6 +8,9 @@ from torch.backends import cudnn
 from torch.nn import DataParallel
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+
+from tensorboard_logger import configure, log_value
+
 import sys
 sys.path.append('/home/nfs/shubham9/keypointdetect')
 
@@ -21,27 +24,27 @@ from src.stage2.viserrloss import VisErrorLoss
 from src.lr_scheduler import LRScheduler
 
 
-def print_log(epoch, lr, train_metrics, train_time, val_metrics=None, val_time=None, save_dir=None, log_mode=None):
-    if epoch > 1:
-        log_mode = 'a'
-    train_metrics = np.mean(train_metrics, axis=0)
-    str0 = 'Epoch %03d (lr %.7f)' % (epoch, lr)
-    str1 = 'Train:      time %3.2f loss: %2.4f loss1: %2.4f loss2: %2.4f' \
-           % (train_time, train_metrics[0], train_metrics[1], train_metrics[2])
-    print(str0)
-    print(str1)
-    f = open(save_dir + 'kpt_' + config.clothes + '_train_log.txt', log_mode)
-    f.write(str0 + '\n')
-    f.write(str1 + '\n')
-    if val_time is not None:
-        val_metrics = np.mean(val_metrics, axis=0)
-        str2 = 'Validation: time %3.2f loss: %2.4f loss1: %2.4f loss2: %2.4f' \
-               % (val_time, val_metrics[0], val_metrics[1], val_metrics[2])
-        print(str2 + '\n')
-        f.write(str2 + '\n\n')
-    f.close()
+# def print_log(epoch, lr, train_metrics, train_time, val_metrics=None, val_time=None, save_dir=None, log_mode=None):
+#     if epoch > 1:
+#         log_mode = 'a'
+#     train_metrics = np.mean(train_metrics, axis=0)
+#     str0 = 'Epoch %03d (lr %.7f)' % (epoch, lr)
+#     str1 = 'Train:      time %3.2f loss: %2.4f loss1: %2.4f loss2: %2.4f' \
+#            % (train_time, train_metrics[0], train_metrics[1], train_metrics[2])
+#     print(str0)
+#     print(str1)
+#     f = open(save_dir + 'kpt_' + config.clothes + '_train_log.txt', log_mode)
+#     f.write(str0 + '\n')
+#     f.write(str1 + '\n')
+#     if val_time is not None:
+#         val_metrics = np.mean(val_metrics, axis=0)
+#         str2 = 'Validation: time %3.2f loss: %2.4f loss1: %2.4f loss2: %2.4f' \
+#                % (val_time, val_metrics[0], val_metrics[1], val_metrics[2])
+#         print(str2 + '\n')
+#         f.write(str2 + '\n\n')
+#     f.close()
 
-def train(data_loader, net, loss, optimizer, lr):
+def train(data_loader, net, loss, optimizer, lr, epoch):
     start_time = time.time()
 
     net.train()
@@ -59,8 +62,9 @@ def train(data_loader, net, loss, optimizer, lr):
         loss_output[0].backward()
         optimizer.step()
         metrics.append([loss_output[0].item(), loss_output[1].item(), loss_output[2].item()])
-        if (i%50==0):
+        if (i%5==0):
             print("%d/%d loss:%.3f"%(i,len(data_loader),loss_output[0].data))
+            log_value('iteration loss', loss_output[0].data, i+epoch*len(data_loader))
     end_time = time.time()
     metrics = np.asarray(metrics, np.float32)
     return metrics, end_time - start_time
@@ -94,6 +98,7 @@ if __name__ == '__main__':
     parser.add_argument('--sigma', type=float, default=0.25, help='sigma ')
     parser.add_argument('--gpus', type=str, default='0', help='gpus')
     parser.add_argument('--out', type=str, default='checkpoints/', help='output directory')
+    parser.add_argument('--train', type=int, default=0, help='train 0/val 1')
 
 
     args = parser.parse_args(sys.argv[1:])
@@ -111,9 +116,11 @@ if __name__ == '__main__':
     # 256 pixels: SGD L1 loss starts from 1e-2, L2 loss starts from 1e-3
     # 512 pixels: SGD L1 loss starts from 1e-3, L2 loss starts from 1e-4
     base_lr = args.lr
-    save_dir = args.out + 'checkpoints/'
+    save_dir = args.out
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
+
+    configure(args.out, flush_secs=5)
 
     net = CascadePyramidNet(config)
     loss = VisErrorLoss()
@@ -154,32 +161,51 @@ if __name__ == '__main__':
                             collate_fn=val_dataset.collate_fn,
                             pin_memory=True)
     optimizer = torch.optim.SGD(net.parameters(), lr, momentum=0.9, weight_decay=1e-4)
-    lrs = LRScheduler(lr, patience=3, factor=0.1, min_lr=0.01*lr, best_loss=best_val_loss)
-    for epoch in range(start_epoch, epochs + 1):
-        train_metrics, train_time = train(train_loader, net, loss, optimizer, lr)
+
+    if args.train==0:
+
+        lrs = LRScheduler(lr, patience=3, factor=0.1, min_lr=0.01*lr, best_loss=best_val_loss)
+        for epoch in range(start_epoch, epochs + 1):
+            train_metrics, train_time = train(train_loader, net, loss, optimizer, lr, epoch)
+            with torch.no_grad():
+                val_metrics, val_time = validate(val_loader, net, loss)
+
+            # print_log(epoch, lr, train_metrics, train_time, val_metrics, val_time, save_dir=save_dir, log_mode=log_mode)
+
+            log_value('train loss',  train_metrics[0], epoch)
+            log_value('train loss 1',  train_metrics[1], epoch)
+            log_value('train loss 2',  train_metrics[2], epoch)
+            log_value('train time',  train_time, epoch)
+            log_value('validation loss',  val_metrics[0], epoch)
+            log_value('validation loss 1',  val_metrics[1], epoch)
+            log_value('validation loss 2',  val_metrics[2], epoch)
+            log_value('validation time',  val_time, epoch)
+
+            val_loss = np.mean(val_metrics[:, 0])
+            lr = lrs.update_by_rule(val_loss)
+            if val_loss < best_val_loss or epoch%10 == 0 or lr is None:
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                state_dict = net.module.state_dict()
+                for key in state_dict.keys():
+                    state_dict[key] = state_dict[key].cpu()
+                torch.save({
+                    'epoch': epoch,
+                    'save_dir': save_dir,
+                    'state_dict': state_dict,
+                    'lr': lr,
+                    'best_val_loss': best_val_loss},
+                    os.path.join(save_dir, 'kpt_'+config.clothes+'_%03d.ckpt' % epoch))
+            if lr is None:
+                print('Training is early-stopped')
+                break
+
+
+    else:
         with torch.no_grad():
             val_metrics, val_time = validate(val_loader, net, loss)
+        print('Validation: time %3.2f loss: %2.4f loss1: %2.4f loss2: %2.4f \n' \
+               % (val_time, val_metrics[0], val_metrics[1], val_metrics[2]))
 
-        print_log(epoch, lr, train_metrics, train_time, val_metrics, val_time, save_dir=save_dir, log_mode=log_mode)
-
-        val_loss = np.mean(val_metrics[:, 0])
-        lr = lrs.update_by_rule(val_loss)
-        if val_loss < best_val_loss or epoch%10 == 0 or lr is None:
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-            state_dict = net.module.state_dict()
-            for key in state_dict.keys():
-                state_dict[key] = state_dict[key].cpu()
-            torch.save({
-                'epoch': epoch,
-                'save_dir': save_dir,
-                'state_dict': state_dict,
-                'lr': lr,
-                'best_val_loss': best_val_loss},
-                os.path.join(save_dir, 'kpt_'+config.clothes+'_%03d.ckpt' % epoch))
-
-        if lr is None:
-            print('Training is early-stopped')
-            break
 
 
