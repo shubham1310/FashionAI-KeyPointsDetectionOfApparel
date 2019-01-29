@@ -4,6 +4,7 @@ import argparse
 import numpy as np
 import torch
 import cv2
+import torch.nn.functional as F
 from torch.autograd import Variable
 from torch.backends import cudnn
 from torch.nn import DataParallel
@@ -22,6 +23,30 @@ from src.stage2.data_generator import DataGenerator, transform
 from src.stage2.cascade_pyramid_network import CascadePyramidNet
 from src.stage2v9.cascade_pyramid_network_v9 import CascadePyramidNetV9
 from src.stage2.viserrloss import VisErrorLoss
+from src.utils import draw_heatmap, draw_keypoints
+from src.stage2.keypoint_encoder import KeypointEncoder
+
+def compute_keypoints(config, args, img0, net, encoder, doflip=False):
+    img_h, img_w, _ = img0.shape
+    # min size resizing
+    scale = config.img_max_size / max(img_w, img_h)
+    img_h2 = int(img_h * scale)
+    img_w2 = int(img_w * scale)
+    img = transform(img0, args.img_max_size, args.mu, args.sigma)
+    pad_imgs = np.zeros([1, 3, args.img_max_size, args.img_max_size], dtype=np.float32)
+    pad_imgs[0, :, :img_h2, :img_w2] = img
+    data = torch.from_numpy(pad_imgs)
+    data = data.cuda(async=True)
+    _, hm_pred = net(data)
+    hm_pred = F.relu(hm_pred, False)
+    hm_pred = hm_pred[0].data.cpu().numpy()
+    if doflip:
+        a = np.zeros_like(hm_pred)
+        a[:, :, :img_w2 // config.hm_stride] = np.flip(hm_pred[:, :, :img_w2 // config.hm_stride], 2)
+        for conj in config.conjug:
+            a[conj] = a[conj[::-1]]
+        hm_pred = a
+    return hm_pred
 
 
 def train(data_loader, net, loss, optimizer, lr, epoch):
@@ -78,7 +103,7 @@ if __name__ == '__main__':
     parser.add_argument('--sigma', type=float, default=0.25, help='sigma ')
     parser.add_argument('--gpus', type=str, default='0', help='gpus')
     parser.add_argument('--out', type=str, default='stage2/', help='output directory')
-    parser.add_argument('--train', type=int, default=0, help='train 0/val 1')
+    parser.add_argument('--train', type=int, default=0, help='train 0/val 1/val_img 2')
 
 
     args = parser.parse_args(sys.argv[1:])
@@ -193,6 +218,21 @@ if __name__ == '__main__':
                    % (val_time, sum(val_metrics[:,0])/n, sum(val_metrics[:,1])/n, sum(val_metrics[:,2])/n))
     else:
         img = cv2.imread(args.data_path)
-        img = transform(img, args.img_max_size, args.mu, args.sigma)
+        # img = transform(img, args.img_max_size, args.mu, args.sigma)
+        img_flip = cv2.flip(img, 1)
+        img_h, img_w, _ = img.shape
+        scale = config.img_max_size / max(img_w, img_h)
+        encoder = KeypointEncoder()
+        with torch.no_grad():
+            hm_pred = compute_keypoints(config, args, img, net, encoder) #* pad_mask
+            hm_pred2 = compute_keypoints(config, args, img_flip, net, encoder, doflip=True) #* pad_mask
+        x, y = encoder.decode_np(hm_pred + hm_pred2, scale, config.hm_stride, (img_w/2, img_h/2), method='maxoffset')
+        keypoints = np.stack([x, y, np.ones(x.shape)], axis=1).astype(np.int16)
 
 
+        # if args.vis:
+        kp_img = draw_keypoints(img, keypoints)
+        cv2.imwrite('log/' + args.out + '/{0}{1}.png'.format(config.clothes, 0), kp_img)
+
+    
+    

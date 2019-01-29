@@ -27,9 +27,6 @@ class DataGenerator(Dataset):
         self.config = config
         self.encoder = KeypointEncoder()
 
-
-
-
     def __getitem__(self, idx):
         img = cv2.imread(self.data.get_image_path(idx))  # BGR
         kpts = self.data.get_keypoints(idx)
