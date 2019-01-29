@@ -1,4 +1,5 @@
 .idea/
 FashionAIdataset/*
-checkpoints/*
+log/*
 *__pycache__*
+
