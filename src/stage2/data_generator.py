@@ -6,6 +6,19 @@ import random
 
 from src.stage2.keypoint_encoder import KeypointEncoder
 
+def transform(img, max_size, mu, sigma):
+    img_h, img_w, _ = img.shape
+    scale = max_size / max(img_w, img_h)
+    img_h2 = int(img_h * scale)
+    img_w2 = int(img_w * scale)
+    img = cv2.resize(img, (img_w2, img_h2), interpolation=cv2.INTER_CUBIC)
+    img = np.transpose(img, (2, 0, 1)).astype(np.float32)  # channel, height, width
+    img[[0, 2]] = img[[2, 0]]
+    img = img / 255.0
+    img = (img - mu) / sigma
+    return img
+
+
 
 class DataGenerator(Dataset):
     def __init__(self, config, data, phase='train'):
@@ -13,6 +26,9 @@ class DataGenerator(Dataset):
         self.data = data
         self.config = config
         self.encoder = KeypointEncoder()
+
+
+
 
     def __getitem__(self, idx):
         img = cv2.imread(self.data.get_image_path(idx))  # BGR
@@ -34,15 +50,17 @@ class DataGenerator(Dataset):
             kpts[:, :2] = np.matmul(kpts_tmp, M.T)
         # min size resizing
         scale = self.config.img_max_size / max(img_w, img_h)
-        img_h2 = int(img_h * scale)
-        img_w2 = int(img_w * scale)
-        img = cv2.resize(img, (img_w2, img_h2), interpolation=cv2.INTER_CUBIC)
+        img = transform(img, self.config.img_max_size, self.config.mu, self.config.sigma )
+        # img_h2 = int(img_h * scale)
+        # img_w2 = int(img_w * scale)
+        # img = cv2.resize(img, (img_w2, img_h2), interpolation=cv2.INTER_CUBIC)
+        # img = np.transpose(img, (2, 0, 1)).astype(np.float32)  # channel, height, width
+        # img[[0, 2]] = img[[2, 0]]
+        # img = img / 255.0
+        # img = (img - self.config.mu) / self.config.sigma
+
         kpts[:, :2] = kpts[:, :2] * scale
         kpts = kpts.astype(np.float32)
-        img = np.transpose(img, (2, 0, 1)).astype(np.float32)  # channel, height, width
-        img[[0, 2]] = img[[2, 0]]
-        img = img / 255.0
-        img = (img - self.config.mu) / self.config.sigma
 
         # transfer from collate_fn
         # maxh = self.config.img_max_size  # max([img.size(1) for img in imgs])
